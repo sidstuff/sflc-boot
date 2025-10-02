@@ -1,0 +1,6 @@
+#!/bin/busybox sh
+
+/bin/busybox --install -s /bin
+export PATH=/bin
+
+exec setsid cttyhack sh sflc-boot.sh

@@ -1,0 +1,24 @@
+dir /bin         755 0 0
+dir /proc        755 0 0
+dir /sys         755 0 0
+dir /usr         755 0 0
+dir /usr/lib     755 0 0
+dir /lib64       755 0 0
+dir /mnt         755 0 0
+dir /mnt/root    755 0 0
+dir /dev         755 0 0
+dir /dev/mapper  755 0 0
+
+nod /dev/console 600 0 0 c 5 1
+nod /dev/tty     666 0 0 c 5 0
+nod /dev/ttyS0   660 0 0 c 4 64
+nod /dev/tty0    620 0 0 c 4 0
+nod /dev/tty1    600 0 0 c 4 1
+
+file /bin/busybox     busybox        755 0 0
+file /bin/shufflecake shufflecake    755 0 0
+file /init            init           755 0 0
+file /sflc-boot.sh    sflc-boot.sh   755 0 0
+file /usb-storage.ko  usb-storage.ko 644 0 0
+file /dm-mod.ko       dm-mod.ko      644 0 0
+file /dm-sflc.ko      dm-sflc.ko     644 0 0
