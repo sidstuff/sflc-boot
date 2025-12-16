@@ -1,11 +1,12 @@
 # 🍰 sflc-boot
 
-A custom initramfs to boot into a hidden OS on a Shufflecake-formatted partition.
+A custom unified kernel image to boot into a hidden OS on a Shufflecake-formatted partition.
 
 * [📸 Screenshots](#-screenshots)
-* [💻 Setup](#-setup)
-  * [Initramfs](#initramfs)
+* [💻 Usage](#-usage)
+  * [Unified Kernel Image](#unified-kernel-image)
   * [Hidden OS](#hidden-os)
+  * [Testing](#testing)
 * [💭 Prerequisites](#-prerequisites)
   * [Wait, what is Shufflecake?](#wait-what-is-shufflecake)
   * [Okay, what is plausible deniability in encryption?](#okay-what-is-plausible-deniability-in-encryption)
@@ -14,7 +15,7 @@ A custom initramfs to boot into a hidden OS on a Shufflecake-formatted partition
 ## 📸 Screenshots
 
 ```
-Shufflecake v0.5.5 - Press Ctrl+C to drop to a rescue shell.
+Shufflecake v0.5.6 - Press Ctrl+C to drop to a rescue shell.
 
 Name of the device to unlock: sda2
 Password:
@@ -27,7 +28,7 @@ major minor  #blocks  name
 8           2    6291456 sda2
 ```
 ```
-Shufflecake v0.5.5 - Device unlocked successfully.
+Shufflecake v0.5.6 - Device unlocked successfully.
 
 Name of the device to mount as root: dm-1
 
@@ -42,14 +43,41 @@ major minor  #blocks  name
 253         1    6290432 dm-1
 ```
 
-## 💻 Setup
+## 💻 Usage
 
-The setup scripts are designed to be run from an official live image of Arch Linux [[ISO]](https://geo.mirror.pkgbuild.com/iso/latest/archlinux-x86_64.iso) while connected to the internet. Like Arch Linux, the scripts currently only support the `x86_64` architecture.
+Check if a satisfactory build is available on the [Releases](https://github.com/sidstuff/sflc-boot/releases) page. Otherwise, to create one yourself, ensure you have Docker available within an existing Linux installation, as well as QEMU if trying to build for a different CPU architecture.
+```sh
+# Use your package manager to install Docker - package names may vary
+apt install docker.io docker-buildx # on Ubuntu 25.04 𝘱𝘭𝘶𝘤𝘬𝘺
+docker run --privileged --rm tonistiigi/binfmt --install all # to install QEMU
+docker buildx create --bootstrap --use --buildkitd-flags '--allow-insecure-entitlement security.insecure'
+docker buildx inspect | grep "Platforms" # check the platforms supprted by Docker
+# Platforms: linux/amd64, linux/amd64/v2, linux/amd64/v3, linux/386, linux/arm64, linux/riscv64, linux/ppc64le, linux/s390x, linux/mips64le, linux/mips64, linux/loong64, linux/arm/v7, linux/arm/v6
+```
+Only use platforms that your target distro (supported values are `ubuntu`, `gentoo`, and `archlinux`) also has a prebuilt kernel of the desired version for. Check its repo to confirm:
 
-Before proceeding, create the partitions that are to be set up as the EFI system partition (ESP) or with hidden OSes.
+| [Ubuntu](https://kernel.ubuntu.com/mainline) | [Gentoo](https://dev.gentoo.org/~mgorny/binpkg) | [Arch Linux](https://archive.archlinux.org/packages/l/linux) |
+|--|--|--|
 
 > [!NOTE]
-> To create a simple GPT disk layout on some `/dev/sdX`, where the first 512MiB is the ESP and the remaining space is occupied by the partition to be formatted with Shufflecake, run
+> You may need Linux modules and/or headers, in which case you can boot or `arch-chroot` into your [hidden OS](#hidden-os) once created, and install the required version from the above repositories. For example, on Arch Linux:
+> ```sh
+> wget https://archive.archlinux.org/packages/l/linux/linux-6.18.1.arch1-2-x86_64.pkg.tar.zst \
+>      https://archive.archlinux.org/packages/l/linux-headers/linux-headers-6.18.1.arch1-2-x86_64.pkg.tar.zst
+> # Use -dd to avoid installing the initramfs as a dependency
+> pacman -Udd linux-6.18.1.arch1-1-x86_64.pkg.tar.zst
+> pacman -U linux-headers-6.18.1.arch1-1-x86_64.pkg.tar.zst
+> ```
+
+To run Docker commands as a regular user, log in once again after adding the user to the `docker` group.
+```sh
+sudo usermod -aG docker $USER
+logout
+```
+Before moving on to the next section, also create the partitions that are to be set up as the EFI system partition (ESP) or with hidden OSes.
+
+> [!TIP]
+> To create a simple GPT layout on some disk `/dev/sdX`, where the first 512MiB is the ESP and the remaining space is occupied by the partition to be formatted with Shufflecake, run
 > ```sh
 > sfdisk /dev/sdX << EOF
 > label: gpt
@@ -58,19 +86,31 @@ Before proceeding, create the partitions that are to be set up as the EFI system
 > EOF
 > ```
 
-### Initramfs
-
-Run [`esp-setup.sh`](https://raw.githubusercontent.com/sidstuff/sflc-boot/master/esp-setup.sh) as root with its first argument being the partition you want to setup as the ESP containing the Unified Kernel Image with the custom initramfs.
+Now, clone the repo and `cd` into it.
 ```sh
-curl -fLO https://github.com/sidstuff/sflc-boot/raw/master/esp-setup.sh
-sh esp-setup.sh /dev/sdXY
+git clone https://github.com/sidstuff/sflc-boot
+cd sflc-boot
 ```
-The UKI will be located at the standard path `𝘦𝘴𝘱/efi/boot/bootx64.efi`, so it can be booted directly from the UEFI menu. You can also use any bootloader of your choice.
 
-> [!TIP]
-> For use with Secure Boot, you can boot or `arch-chroot` into your [hidden OS](#hidden-os) once created, mount the ESP, and sign the UKI using `sbctl` (or use one of the other methods listed [here](https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot)).
+### Unified Kernel Image
+
+Download any of the prebuilt UKIs available on the [Releases](https://github.com/sidstuff/sflc-boot/releases) page
+```sh
+wget -P images/ https://github.com/sidstuff/sflc-boot/releases/latest/download/0.5.6-shufflecake-6.14.10-ubuntu-linux-amd64.efi
+```
+or use Docker Bake to build one with your chosen kernel and Shufflecake versions (the latest if unspecified).
+```sh
+DISTRO="ubuntu" KERNEL="6.14.10" SHUFFLECAKE="0.5.6" docker buildx bake --set *.platform=amd64 uki
+```
+Then setup any partition `/dev/sdX𝘠` as an ESP, writing the UKI to it.
+```
+sudo ./write-uki.sh images/0.5.6-shufflecake-6.14.10-ubuntu-linux-amd64.efi /dev/sdX𝘠
+```
+It will be placed at the standard path `/efi/boot/bootx64.efi` within, so it can be booted directly from the UEFI menu (or any bootloader of your choice).
+
+> [!NOTE]
+> For use with Secure Boot, you can boot or `arch-chroot` into your [hidden OS](#hidden-os) once created, mount the ESP, and sign the UKI using `sbctl`.
 > ```sh
-> pacman -S sbctl
 > # Make sure you booted with Secure Boot in Setup Mode
 > sbctl status
 > # Installed:	✘ Sbctl is not installed
@@ -81,59 +121,97 @@ The UKI will be located at the standard path `𝘦𝘴𝘱/efi/boot/bootx64.efi`
 > sbctl sign -s 𝘦𝘴𝘱/efi/boot/bootx64.efi
 > ```
 
-For those wanting a different setup, run `esp-setup.sh` without any arguments to simply output the `initramfs.cpio.gz` and `bootx64.efi` files in the current directory for further use. This can also be useful to test the generated initramfs with something like QEMU if modifying the script.
-```sh
-pacman -S qemu-base
-qemu-system-x86_64 -enable-kvm -kernel /lib/modules/$(uname -r)/vmlinuz -initrd initramfs.cpio.gz -append "console=ttyS0" -cpu max -m 128M -nographic -serial mon:stdio -nodefaults # Press Ctrl+a x to quit
-```
-
-> [!NOTE]
-> If you need a UKI with custom kernel `cmdline` parameters and a(n uncompressed) CPU microcode CPIO archive included, you can build one from the initramfs image using a command like
-> ```sh
-> ukify build --linux=/lib/modules/$(uname -r)/vmlinuz \
->             --initrd=cpu-ucode.img \
->             --initrd=initramfs.cpio.gz \
->             --cmdline="quiet rw"
-> ```
-
 ### Hidden OS
 
-If you already ran `esp-setup.sh`, it will also have created in the working directory the `shufflecake` binary and `dm-sflc.ko` module that you need to use Shufflecake (as well as the `busybox` binary, so it doesn't need to be rebuilt if re-running `esp-setup.sh` for any reason).
+Before proceeding, use Shufflecake to create and open the hidden volumes that are to contain OSes. Expand the collapsed section for instructions.
 
-Otherwise, build Shufflecake:
+<details>
+
+<summary>&nbsp;<b>Volume Creation</b></summary><br>
+
+First, build Shufflecake.
 ```sh
-mount -o remount,size=2G /run/archiso/cowspace
-pacman -Sy git make gcc device-mapper libgcrypt
-pacman -U https://archive.archlinux.org/packages/l/linux-headers/linux-headers-$(uname -r | sed 's/-/\./')-x86_64.pkg.tar.zst
+# Use your package manager to install deps - exact names may vary
+sudo apt install git gcc make libgcrypt-dev libdevmapper-dev linux-headers-$(uname -r)
 git clone --depth 1 https://codeberg.org/shufflecake/shufflecake-c
-cd shufflecake-c
-make
+cd shufflecake-c && make
 ```
-Stay in the same directory and load the kernel module `dm-sflc.ko`.
+Stay in the same directory and (after ensuring its dependency `dm_mod` is loaded), insert the module `dm-sflc.ko` into the running kernel.
 ```sh
-insmod dm-sflc.ko
+sudo modprobe dm_mod
+sudo insmod dm-sflc.ko
 ```
-Now the commands to initialize and open Shufflecake volumes on a partition `/dev/sdXY` are simply
+Now you can `init`, `open`, and finally `close`, some Shufflecake volumes `/dev/mapper/sflc_𝘔_𝘕`  on a partition `/dev/sdX𝘠` via
 ```sh
-./shufflecake init /dev/sdXY
-./shufflecake open /dev/sdXY
-```
-The volumes will be opened as some `/dev/mapper/sflc_M_N`.
-
-Run [`root-setup.sh`](https://raw.githubusercontent.com/sidstuff/sflc-boot/master/root-setup.sh) as root with its first argument being whichever of these volumes you wish to setup an installation of Arch Linux in.
-```sh
-curl -fLO https://github.com/sidstuff/sflc-boot/raw/master/root-setup.sh
-sh root-setup.sh /dev/mapper/sflc_M_N
-```
-It will be relatively barebones, but you can install more programs later.
-
-Close all the Shufflecake volumes on the partition with
-```sh
-./shufflecake close /dev/sdXY
+sudo ./shufflecake 𝘢𝘤𝘵𝘪𝘰𝘯 /dev/sdX𝘠
 ```
 
-> [!TIP]
-> If you later want to run `esp-setup.sh`, you can do so within the `shufflecake-c/` directory containing the `shufflecake` and `dm-sflc.ko` files to avoid rebuilding them.
+</details>
+
+**OS Install**
+
+To output the latest rootfs tarball image of your target OS to `images/`, run a command within the cloned directory like
+```sh
+DISTRO="ubuntu" RELEASE="noble" docker buildx bake --allow security.insecure --set *.platform=amd64
+```
+or download one from the [Releases](https://github.com/sidstuff/sflc-boot/releases) page if a recent build exists.
+```
+wget -P images/ https://github.com/sidstuff/sflc-boot/releases/latest/download/ubuntu-noble-rootfs-amd64.tar.xz
+```
+Then setup any of the Shufflecake volumes `/dev/mapper/sflc_𝘔_𝘕` as root devices with your desired filesystem, unpacking the earlier tarball into them.
+```sh
+sudo ./write-rootfs.sh --fs=ext4 images/ubuntu-noble-rootfs-amd64.tar.xz /dev/mapper/sflc_{𝘮..𝘔}_{𝘯..𝘕}
+```
+The created OS will be relatively barebones, but you can install more programs once you boot into it.
+
+### Testing
+
+Use QEMU to test `sflc-boot` without actually writing to and booting off a pen drive. Within the cloned directory:
+```sh
+CMDLINE="console=ttyS0" DISTRO="ubuntu" KERNEL="6.14.10" SHUFFLECAKE="0.5.6" \
+docker buildx bake --set *.platform=amd64 uki
+mkdir -p esp/efi/boot disk
+cp images/0.5.6-shufflecake-6.14.10-ubuntu-linux-amd64.efi esp/efi/boot/bootx64.efi
+
+FIRMWARE="no" DISTRO="ubuntu" RELEASE="24.04.3" \
+docker buildx bake --allow security.insecure --set *.platform=amd64
+dd if=/dev/zero of=disk.img bs=1M count=4000 conv=fsync
+sudo ./write-rootfs.sh --fs=ext4 images/ubuntu-24.04.3-rootfs-amd64.tar.xz disk.img
+
+# Use your package manager to install QEMU - package name may vary
+sudo apt install qemu-system
+qemu-img create root.img 4G
+qemu-system-x86_64 -m 2G -cpu base -nodefaults -nographic -serial mon:stdio \
+                   -bios /usr/share/ovmf/OVMF.fd \
+                   -drive format=raw,file=fat:rw:esp/ \
+                   -drive format=raw,file=disk.img,if=none,cache=writeback,id=stick1 \
+                   -drive format=raw,file=root.img,if=none,cache=writeback,id=stick2 \
+                   -device qemu-xhci \
+                   -device usb-storage,drive=stick1 \
+                   -device usb-storage,drive=stick2 # Press Ctrl+a x to quit
+```
+Within the new environment, press Ctrl+C to enter the busybox shell, then create the hidden OS on the virtual USB drive using the following commands.
+```sh
+cat /proc/partitions
+# major minor  #blocks  name
+#    8        0    4194304 sda
+#    8       16    4096000 sdb
+printf "o\nn\np\n1\n\n\nw\n" | fdisk /dev/sda
+shufflecake init /dev/sda1
+shufflecake open /dev/sda1
+dd if=/dev/sdb of=/dev/dm-0 bs=1M conv=fsync
+shufflecake close /dev/sda1
+```
+Then quit QEMU by pressing `Ctrl+a` `x` and (after optionally deleting the no longer necessary files) rerun QEMU.
+```sh
+rm -rf images/ disk*
+qemu-system-x86_64 -m 2G -cpu base -nodefaults -nographic -serial mon:stdio \
+                   -bios /usr/share/ovmf/OVMF.fd \
+                   -drive format=raw,file=fat:rw:esp/ \
+                   -drive format=raw,file=root.img,if=none,cache=writeback,id=stick \
+                   -device qemu-xhci \
+                   -device usb-storage,drive=stick # Press Ctrl+a x to quit
+```
 
 ## 💭 Prerequisites
 
@@ -154,7 +232,7 @@ Shufflecake tries to make the denial plausible by hiding, in the unused space of
 From the original paper [[PDF]](https://eprint.iacr.org/2023/1529.pdf):
 > [...] the OS itelf (or other applications installed therein) can unintentionally leak to an adversary the presence of hidden data when a hidden volume is unlocked. This can happen for example through the OS logging disk events, search agents indexing files within the hidden volume when this is unlocked, even applications such as image galleries or document readers caching previews of opened documents. Customizing the OS’ behavior in such a way to avoid these pitfalls is an almost hopeless task.  A proposed solution to this problem is to have the OS itself inside a hidden volume.
 
-To facilitate this, we create a custom initramfs image containing Shufflecake that can ask for a password and boot into such a hidden OS on start-up.
+To facilitate this, we create a custom unified kernel image containing Shufflecake that can ask for a password and boot into such a hidden OS on start-up.
 
 > [!IMPORTANT]
 > For plausibility, the decoy OS(es) need to be kept up-to-date by regularly performing system updates, downloading emails, etc.

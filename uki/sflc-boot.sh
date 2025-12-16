@@ -20,17 +20,18 @@ setup()
   ln -s /proc/self/fd/1 /dev/stdout
   ln -s /proc/self/fd/2 /dev/stderr
 
-  insmod usb-storage.ko
-  insmod dm-mod.ko
+  if [ -f "usb-storage.ko" ]; then insmod usb-storage.ko; fi
+  if [ -f "dm-mod.ko" ]; then insmod dm-mod.ko; fi
   insmod dm-sflc.ko
 
   echo 0 > /proc/sys/kernel/printk
 )
 setup || rescue
 
+touch FLAG
 interrupt()
 {
-  rm -f flag
+  rm -f FLAG flag
   clear
   stty echo
   exec sh
@@ -45,7 +46,7 @@ get_device()
 {
   clear
   printf "$PREFIX - $MSG\n\n$1"
-  { sleep 5; printf "\0337\033[1;1H\033[0K%s\0338" "$PREFIX - $HELP"; } &
+  { sleep 5; if [ -f FLAG ]; then printf "\0337\033[1;1H\033[0K%s\0338" "$PREFIX - $HELP"; fi; } &
 
   touch flag
   while [ -f flag ]; do
@@ -87,7 +88,7 @@ mount_root()
 {
   get_device "Name of the device to mount as root: " || return 1
 
-  if ! mount -o ro "/dev/$DEVICE" /mnt/root >/dev/null 2>&1; then
+  if ! mount "/dev/$DEVICE" /mnt >/dev/null 2>&1; then
     MSG="Failed to mount root. Try again..."
     return 1
   fi
@@ -98,4 +99,4 @@ umount /proc
 umount /sys
 # `umount /dev` fails with `umount: can't unmount /dev: Device or resource busy`
 
-exec switch_root /mnt/root /sbin/init
+exec switch_root /mnt /sbin/init
