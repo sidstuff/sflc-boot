@@ -1,17 +1,21 @@
 ARG distro="ubuntu" version='[0-9]+\.[0-9]+\.?[0-9]*' sflc_path="shufflecake-c/shufflecake-userland/bin/proj_build/shufflecake"
 ARG mod_path="shufflecake-c/dm-sflc/bin/dm-sflc.ko" mod_dir="lib/modules/*/kernel/drivers"
 
-FROM debian:testing-slim AS target
+FROM ubuntu:questing AS target
+RUN apt update && apt install -y --no-install-recommends wget ca-certificates gnupg make pahole libelf1t64 \
+                      libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static systemd-boot-efi systemd-ukify
+COPY toolchain.list /etc/apt/sources.list.d/
 ARG sflc_url sflc_path mod_path mod_dir version
-ADD $sflc_url https://raw.githubusercontent.com/torvalds/linux/master/usr/gen_init_cpio.c .
-RUN tar -xf *.tar.gz && apt update && apt install -y --no-install-recommends wget ca-certificates make pahole \
-                            libelf1t64 libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static systemd-boot-efi systemd-ukify
+ADD $sflc_url common.sh https://raw.githubusercontent.com/torvalds/linux/master/usr/gen_init_cpio.c .
+RUN sh common.sh
 
-FROM --platform=linux/amd64 debian:testing-slim AS amd64
+FROM --platform=amd64 ubuntu:questing AS amd64
+RUN apt update && apt install -y --no-install-recommends wget ca-certificates gnupg make pahole libelf1t64 \
+                      libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static systemd-boot-efi systemd-ukify
+COPY toolchain.list /etc/apt/sources.list.d/
 ARG sflc_url sflc_path mod_path mod_dir version
-ADD $sflc_url https://raw.githubusercontent.com/torvalds/linux/master/usr/gen_init_cpio.c .
-RUN tar -xf *.tar.gz && apt update && apt install -y --no-install-recommends wget ca-certificates make pahole \
-                            libelf1t64 libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static systemd-boot-efi systemd-ukify
+ADD $sflc_url common.sh https://raw.githubusercontent.com/torvalds/linux/master/usr/gen_init_cpio.c .
+RUN sh common.sh
 
 ARG TARGETARCH TARGETVARIANT kernel
 RUN set -e; get() { wget -qO- "$url" | xmllint --recover --html --xpath '//a/text()' - | grep -oP "$format" | sort -V | tail -1; }; \

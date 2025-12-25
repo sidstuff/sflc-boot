@@ -1,4 +1,4 @@
-FROM debian:testing-slim
+FROM ubuntu:questing
 RUN mkdir output; apt update && apt install -y --no-install-recommends wget ca-certificates systemd arch-install-scripts xz-utils
 ARG TARGETARCH distro
 RUN << EOI

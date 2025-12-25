@@ -1,0 +1,11 @@
+# gcc-9 https://launchpad.net/~ubuntu-toolchain-r/+archive/ubuntu/test/+packages?field.name_filter=gcc-9
+deb [ signed-by=/usr/share/keyrings/toolchain.gpg ] http://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu bionic main
+
+# gcc-9-cross https://launchpad.net/~ubuntu-toolchain-r/+archive/ubuntu/ppa/+packages?field.name_filter=gcc-9
+deb [ signed-by=/usr/share/keyrings/toolchain.gpg ] http://ppa.launchpadcontent.net/ubuntu-toolchain-r/ppa/ubuntu focal main
+
+# gcc-10 and gcc-10-cross https://launchpad.net/~ubuntu-toolchain-r/+archive/ubuntu/ppa/+packages?field.name_filter=gcc-10
+deb [ signed-by=/usr/share/keyrings/toolchain.gpg ] http://ppa.launchpadcontent.net/ubuntu-toolchain-r/ppa/ubuntu jammy main
+
+# gcc-16 and gcc-16-cross https://launchpad.net/~ubuntu-toolchain-r/+archive/ubuntu/test/+packages?field.name_filter=gcc-16
+deb [ signed-by=/usr/share/keyrings/toolchain.gpg ] http://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu resolute main
