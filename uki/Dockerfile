@@ -45,16 +45,17 @@ RUN set -e; get() { wget -qO- "$url" | xmllint --recover --html --xpath '//a/tex
       make -C shufflecake-c/shufflecake-userland; \
       gcc gen_init_cpio.c -o gen_init_cpio; \
     fi; \
-    mv image/boot/vm* kernel-$kern; \
+    mv image/boot/vm* $kern-ubuntu; \
     mv $mod_path $(ls image/$mod_dir/md/dm-mod.ko image/$mod_dir/usb/storage/usb-storage.ko) .
 
 FROM target AS ubuntu
 ARG TARGETARCH kernel
-COPY --from=amd64 *$sflc_path *gen_init_cpio *.ko kernel-* .
+COPY --from=amd64 *$sflc_path *gen_init_cpio *.ko *-ubuntu .
 RUN [ "$TARGETARCH" = amd64 ] || { set -e; \
       apt install -y --no-install-recommends gcc; \
       make -C shufflecake-c/shufflecake-userland && mv $sflc_path .; \
       gcc gen_init_cpio.c -o gen_init_cpio; \
+      mv *-ubuntu $(./shufflecake -V)-shufflecake-$(ls *-ubuntu); \
     }
 
 FROM target AS gentoo
@@ -73,8 +74,8 @@ RUN set -e; get() { wget -qO- "$url" | xmllint --recover --html --xpath '//a/tex
     make -C shufflecake-c/dm-sflc KERNEL_DIR=$(realpath image/usr/src/*/); \
     make -C shufflecake-c/shufflecake-userland; \
     gcc gen_init_cpio.c -o gen_init_cpio; \
-    objcopy -O binary -j .linux image/usr/src/*/arch/*/boot/uki.efi kernel-$kern; \
-    mv $sflc_path $mod_path $(ls image/$mod_dir/md/dm-mod.ko image/$mod_dir/usb/storage/usb-storage.ko) .
+    mv $sflc_path $mod_path $(ls image/$mod_dir/md/dm-mod.ko image/$mod_dir/usb/storage/usb-storage.ko) .; \
+    objcopy -O binary -j .linux image/usr/src/*/arch/*/boot/uki.efi $(./shufflecake -V)-shufflecake-$kern-gentoo; \
 
 FROM target AS archlinux
 RUN apt install -y zstd
@@ -94,8 +95,8 @@ RUN set -e; get() { wget -qO- "$url" | xmllint --recover --html --xpath '//a/tex
     make -C shufflecake-c/dm-sflc KERNEL_DIR=$(realpath image/usr/src/*/); \
     make -C shufflecake-c/shufflecake-userland; \
     gcc gen_init_cpio.c -o gen_init_cpio; \
-    mv image/usr/lib/modules/*/vmlinuz kernel-$kern; \
     mv $sflc_path $mod_path $(ls image/usr/$mod_dir/md/dm-mod.ko.zst image/usr/$mod_dir/usb/storage/usb-storage.ko.zst) .; \
+    mv image/usr/lib/modules/*/vmlinuz $(./shufflecake -V)-shufflecake-$kern-arch; \
     if ls *.ko.zst; then unzstd *.ko.zst; fi
 
 FROM $distro AS build
@@ -109,12 +110,12 @@ RUN ./gen_init_cpio initramfs.list | gzip --best > initramfs.cpio.gz
 
 FROM alpine:latest AS ukify
 RUN apk add --no-cache ukify systemd-efistub
-COPY --from=build kernel-* initramfs.cpio.gz shufflecake .
-ARG TARGETPLATFORM distro cmdline
-RUN kernel=$(ls kernel-*); \
-    ukify build --linux=$kernel \
+COPY --from=build *-shufflecake-* initramfs.cpio.gz .
+ARG TARGETPLATFORM cmdline
+RUN name=$(ls *-shufflecake-*); \
+    ukify build --linux=$name \
                 --initrd=initramfs.cpio.gz \
                 --cmdline="$cmdline" \
-                --output=$(./shufflecake -V)-shufflecake-${kernel#kernel-}-${distro%linux}-$(echo "$TARGETPLATFORM" | tr '/' '-').efi
+                --output=$name-$(echo "$TARGETPLATFORM" | tr '/' '-').efi
 FROM scratch
 COPY --from=ukify *.efi .
