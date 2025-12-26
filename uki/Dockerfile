@@ -2,16 +2,16 @@ ARG distro="ubuntu" version='[0-9]+\.[0-9]+\.?[0-9]*' sflc_path="shufflecake-c/s
 ARG mod_path="shufflecake-c/dm-sflc/bin/dm-sflc.ko" mod_dir="lib/modules/*/kernel/drivers"
 
 FROM ubuntu:questing AS target
-RUN apt update && apt install -y --no-install-recommends wget ca-certificates gnupg make pahole libelf1t64 \
-                      libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static systemd-boot-efi systemd-ukify
+RUN apt update && apt install -y --no-install-recommends wget ca-certificates gnupg make pahole \
+                      libelf1t64 libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static
 COPY toolchain.list /etc/apt/sources.list.d/
 ARG sflc_url sflc_path mod_path mod_dir version
 ADD $sflc_url common.sh https://raw.githubusercontent.com/torvalds/linux/master/usr/gen_init_cpio.c .
 RUN sh common.sh
 
 FROM --platform=amd64 ubuntu:questing AS amd64
-RUN apt update && apt install -y --no-install-recommends wget ca-certificates gnupg make pahole libelf1t64 \
-                      libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static systemd-boot-efi systemd-ukify
+RUN apt update && apt install -y --no-install-recommends wget ca-certificates gnupg make pahole \
+                      libelf1t64 libxml2-utils libgcrypt-dev libdevmapper-dev busybox-static
 COPY toolchain.list /etc/apt/sources.list.d/
 ARG sflc_url sflc_path mod_path mod_dir version
 ADD $sflc_url common.sh https://raw.githubusercontent.com/torvalds/linux/master/usr/gen_init_cpio.c .
@@ -106,12 +106,15 @@ RUN for module in *.ko; do echo "file $module $module 644 0 0" >> initramfs.list
     do echo "file /lib/${lib##*/} $lib 755 0 0" >> initramfs.list; done
 COPY init sflc-boot.sh .
 RUN ./gen_init_cpio initramfs.list | gzip --best > initramfs.cpio.gz
+
+FROM alpine:latest AS ukify
+RUN apk add --no-cache ukify systemd-efistub
+COPY --from=build kernel-* initramfs.cpio.gz shufflecake .
 ARG TARGETPLATFORM distro cmdline
-RUN kernel=$(realpath kernel-* | grep -oP '(?<=kernel-).*$'); \
-    ukify build --linux=$(realpath kernel-*) \
+RUN kernel=$(ls kernel-*); \
+    ukify build --linux=$kernel \
                 --initrd=initramfs.cpio.gz \
                 --cmdline="$cmdline" \
-                --output=$(./shufflecake -V)-shufflecake-$kernel-${distro%linux}-$(echo "$TARGETPLATFORM" | tr '/' '-').efi
+                --output=$(./shufflecake -V)-shufflecake-${kernel#kernel-}-${distro%linux}-$(echo "$TARGETPLATFORM" | tr '/' '-').efi
 FROM scratch
-ARG distro
-COPY --from=build *.efi .
+COPY --from=ukify *.efi .
